@@ -1,17 +1,16 @@
 ﻿<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-    <title>Webdevmojo - How to Play</title>
+    <title>Webdevmojo - Clock Demo</title>
 </head>
 <body>
 
-<h1>How to Play</h1>
+<h1>Clock Demo</h1>
 
 <div id="theButton" onclick="StartClock();">Start the clock</div>
 <div id="theClock" style="font-family: 'Comic Sans MS'; font-size: 5em;"></div>
 
 <script type="text/javascript">
-    document.write("Hello World");
     var timerID = null;
     function StartClock() {
         if (document.getElementById("theButton").innerText == "Start the clock") {
@@ -36,6 +35,6 @@
         timerID = setTimeout("ShowTime()", 1000);
     }
 </script>
-<!-- From http://www.htmlgoodies.com/beyond/javascript/article.php/3470991 -->
+<!-- Clock Demo from http://www.htmlgoodies.com/beyond/javascript/article.php/3470991 -->
 </body>
 </html>

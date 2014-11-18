@@ -1,0 +1,575 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title></title>
+    <script type="text/javascript" src="../Scripts/jquery-1.6.4.min.js"></script>
+</head>
+<body>
+    <h1 id="versionHeadLine">Analyze Your Pages</h1>
+    <div id="piwikApp">
+        <div>Use the dropdowns to select a different period and date to view.</div>
+        <div id="piwikControls"></div>
+        <div id="piwikUrlInput"></div>
+        <div id="piwikMessage"></div>
+        <div id="piwikUrlReport"></div>
+    </div>
+
+    <script type="text/javascript">
+        //The MIT License (MIT)
+
+        //Copyright (c) 2014 Paul Burtness
+
+        //Permission is hereby granted, free of charge, to any person obtaining a copy
+        //of this software and associated documentation files (the "Software"), to deal
+        //in the Software without restriction, including without limitation the rights
+        //to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        //copies of the Software, and to permit persons to whom the Software is
+        //furnished to do so, subject to the following conditions:
+
+        //The above copyright notice and this permission notice shall be included in all
+        //copies or substantial portions of the Software.
+
+        //THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        //IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        //FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        //AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        //LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        //SOFTWARE.    
+
+        //To learn about the PIWIK api go to
+        //http://piwik.org/docs/analytics-api/
+
+        // create a namespace for this app
+        // based on http://www.kenneth-truyers.net/2013/04/27/javascript-namespaces-and-modules/
+        var PIWIK = PIWIK || {};
+
+        //setup main objects for organizing data and code
+        PIWIK["VIEW"] = {};
+        PIWIK["LOGIC"] = {};
+        PIWIK["DATA"] = {};
+
+        //setup constants for specific implementation of this app
+        PIWIK["theStartDate"] = new Date(2014, 1, 1);           //put in your first date of PIWIK data
+        PIWIK["theNowDate"] = new Date();
+        //Date object for current date minus one day, the last valid date of stats, if date is 0 that creates last day of previous month
+        PIWIK["theEndDate"] = new Date(PIWIK.theNowDate.getFullYear(), PIWIK.theNowDate.getMonth(), PIWIK.theNowDate.getDate() - 1);
+
+        //setup DATA objects used in the JQUERY JSON request to PIWIK
+        PIWIK["theURL"] = "https://analytics.civicplus.com/index.php"; //url for analyzing user list of pages, yours may be different
+        PIWIK.DATA["PARAMETERS"] = {};         //object for all name-value pairs in URL request to PIWIK
+        PIWIK.DATA.PARAMETERS["module"] = "API";
+        PIWIK.DATA.PARAMETERS["method"] = "Actions.getPageUrl";
+
+        PIWIK.DATA.PARAMETERS["idSite"] = "XXXX";                      //YOUR PIWIK SITE ID
+        PIWIK.DATA.PARAMETERS["token_auth"] = "XXXX";                  //YOUR PIWIK AUTHENTICATION TOKEN, token_auth
+
+        PIWIK.DATA.PARAMETERS["format"] = "JSON";
+        PIWIK.DATA.PARAMETERS["jsoncallback"] = "piwik";
+        PIWIK.DATA.PARAMETERS["period"] = "";
+        PIWIK.DATA.PARAMETERS["date"] = "";
+        PIWIK.DATA.PARAMETERS["pageUrl"] = "";
+
+        //setup other constant values for the app
+        PIWIK["theApp"] = "#piwikApp";             //div for the whole app
+        PIWIK["theMessage"] = "#piwikMessage";     //div for the message
+        PIWIK["theControls"] = "#piwikControls";   //div for the controls
+        PIWIK["theUrlInput"] = "#piwikUrlInput";   //div for the URL input controls
+        PIWIK["theUrlReport"] = "#piwikUrlReport";   //div for the URL output
+        PIWIK["theHeadline"] = "#versionHeadLine";  //id of the H1 element for the pagw
+        //RegExp is from http://stackoverflow.com/questions/8188645/javascript-regex-to-match-a-url-in-a-field-of-text
+        PIWIK["theUrlRegExp"] = new RegExp('(http|ftp|https)://[a-z0-9\-_]+(\.[a-z0-9\-_]+)+([a-z0-9\-\.,@\?^=%&;:/~\+#]*[a-z0-9\-@\?^=%&;/~\+#])?', 'i');
+
+        //setup other DATA objects
+        PIWIK.DATA["parameterList"] = [];      //array list of all names in PARAMETERS, used as an index for loops
+        PIWIK.DATA["urlList"] = [];            //array of URLs to submit for analysis
+        PIWIK.DATA["urlListCount"] = 0;        //number of URLs for iterating through the list
+        PIWIK.DATA["ANALYTICS"] = [];          //object for returned analytics
+
+        PIWIK.VIEW.showForm = function () {
+            $(PIWIK.theControls).empty();
+            $(PIWIK.theControls).append("<form id=\"piwikUrlForm\"></form>");
+        }
+        PIWIK.VIEW.showDropdowns = function () {
+            //create 4 dropdown, initialize the PeriodDropdown, leave others blank and disabled
+            //start with a div for all the dropdowns
+            $("#piwikUrlForm").append("<div id=\"piwikDropdownsHolder\"></div>");
+            //add a dropdown to select the period
+            $("#piwikDropdownsHolder").append("<div id=\"piwikPeriodDropdown\" class=\"piwikDropdown\"></div>");
+            $("#piwikPeriodDropdown").append("<label for=\"piwikSelectPeriod\">Time Period: </label><br />");
+            $("#piwikPeriodDropdown").append("<select id=\"piwikSelectPeriod\"></select>");
+            $("#piwikSelectPeriod").append("<option value=\"-1\">Select a Period</option>");
+            $("#piwikSelectPeriod").append("<option value=\"month\">Month</option>");
+            $("#piwikSelectPeriod").append("<option value=\"week\">Week</option>");
+            $("#piwikSelectPeriod").append("<option value=\"day\">Day</option>");
+            //add an event listener to the dropdown
+            $("#piwikSelectPeriod").change(function () { PIWIK.VIEW.handleSelectPeriod(); });
+            //add a dropdown to select from list of valid years but leave it disabled
+            $("#piwikDropdownsHolder").append("<div id=\"piwikYearDropdown\" class=\"piwikDropdown\"></div>");
+            $("#piwikYearDropdown").append("<label for=\"piwikSelectYear\">Year: </label><br />");
+            $("#piwikYearDropdown").append("<select id=\"piwikSelectYear\"></select>");
+            $("#piwikSelectYear").append("<option value=\"-1\">Select Year</option>");
+            //add an event listener to the dropdown
+            $("#piwikSelectYear").change(function () { PIWIK.VIEW.handleSelectYear(); });
+            $("#piwikSelectYear").prop("disabled", true);
+            //add a dropdown to select from list of valid months for the year selected, but leave it disabled
+            $("#piwikDropdownsHolder").append("<div id=\"piwikMonthDropdown\" class=\"piwikDropdown\"></div>");
+            $("#piwikMonthDropdown").append("<label for=\"piwikSelectMonth\">Month: </label><br />");
+            $("#piwikMonthDropdown").append("<select id=\"piwikSelectMonth\"></select>");
+            $("#piwikSelectMonth").append("<option value=\"-1\">Select Month</option>");
+            //add an event listener to the dropdown
+            $("#piwikSelectMonth").change(function () { PIWIK.VIEW.handleSelectMonth(); });
+            $("#piwikSelectMonth").prop("disabled", true);
+            //add a dropdown to select from list of valid dates for the selected year and month, but leave it disabled
+            $("#piwikDropdownsHolder").append("<div id=\"piwikDateDropdown\" class=\"piwikDropdown\"></div>");
+            $("#piwikDateDropdown").append("<label for=\"piwikSelectDate\">Date: </label><br />");
+            $("#piwikDateDropdown").append("<select id=\"piwikSelectDate\"></select>");
+            $("#piwikSelectDate").append("<option value=\"-1\">Select Date</option>");
+            //add an event listener to the dropdown
+            $("#piwikSelectDate").change(function () { PIWIK.VIEW.handleSelectDate(); });
+            $("#piwikSelectDate").prop("disabled", true);
+        }
+        PIWIK.VIEW.showUrlControls = function () {
+            $("#piwikUrlForm").append("<div id=\"piwikUrlControls\"></div>");
+            $("#piwikUrlControls").append("<label for=\"piwikUrlTextArea\">Enter your list of URLs</label><br />");
+            $("#piwikUrlControls").append("<textarea id=\"piwikUrlTextArea\" rows=\"10\" cols=\"80\"></textarea><br />");
+            $("#piwikUrlControls").append("<input id=\"piwikUrlSubmit\" class=\"piwikButton\" type=\"button\" value=\"Analyze Pages\" />");
+            $("#piwikUrlSubmit").prop("disabled", true);
+            $("#piwikUrlSubmit").click(PIWIK.DATA.getUrls);
+        }
+        PIWIK.VIEW.showLoading = function () {
+            $(PIWIK.theMessage).empty();
+            $(PIWIK.theMessage).append("<div class=\"piwikTheMessage\">Loading data from PIWIK...</div>");
+        }
+        PIWIK.VIEW.showPeriodDate = function () {
+            //display the current period and date parameters in theMessage
+            $(PIWIK.theMessage).empty();
+            var theYear;
+            var theMonth;
+            var theDay;
+            var theDisplayDateParameter = PIWIK.DATA.PARAMETERS["date"].split("-");
+            if (theDisplayDateParameter.length > 1) {
+                //date parameter was in format, yyyy-mm-dd
+                var theDisplayDate = new Date(parseInt(theDisplayDateParameter[0], 10), parseInt(theDisplayDateParameter[1], 10) - 1, parseInt(theDisplayDateParameter[2], 10));
+                theYear = theDisplayDate.getFullYear();
+                theMonth = PIWIK.LOGIC.getMonthName(theDisplayDate.getMonth(), "long");
+                theDay = theDisplayDate.getDate();
+            } else {
+                //date parameter was yesterday
+                theYear = PIWIK.theEndDate.getFullYear();
+                theMonth = PIWIK.LOGIC.getMonthName(PIWIK.theEndDate.getMonth(), "long");
+                theDay = PIWIK.theEndDate.getDate(); //theEndDate is always yesterday
+            }
+            switch (PIWIK.DATA.PARAMETERS["period"]) {
+                case "month":
+                    $(PIWIK.theMessage).append("<div class=\"piwikTheMessage\">Showing <strong>" + $(PIWIK.theHeadline).text() + "</strong> for the <strong>month</strong> of <strong>" + theMonth + ", " + theYear + "</strong></div>");
+                    break;
+                case "week":
+                    $(PIWIK.theMessage).append("<div class=\"piwikTheMessage\">Showing <strong>" + $(PIWIK.theHeadline).text() + "</strong> for the <strong>week</strong> starting on <strong>" + theMonth + " " + theDay + ", " + theYear + "</strong></div>");
+                    break;
+                case "day":
+                    $(PIWIK.theMessage).append("<div class=\"piwikTheMessage\">Showing <strong>" + $(PIWIK.theHeadline).text() + "</strong> for the <strong>day</strong> - <strong>" + theMonth + " " + theDay + ", " + theYear + "</strong></div>");
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        PIWIK.VIEW.resetSelectMonth = function () {
+            $("#piwikSelectMonth").children().remove().end().append("<option value=\"-1\">Select Month</option>");
+            $("#piwikSelectMonth").prop("disabled", true);
+        }
+        PIWIK.VIEW.resetSelectDate = function () {
+            $("label[for='piwikSelectDate']").text("Date:");
+            $("#piwikSelectDate").children().remove().end().append("<option value=\"-1\">Select Date</option>");
+            $("#piwikSelectDate").prop("disabled", true);
+        }
+
+        PIWIK.VIEW.handleSelectPeriod = function () {
+            switch ($("#piwikSelectPeriod").val().toString()) {
+                case "-1":
+                    //if the first option is selected, disable the other dropdowns
+                    $("#piwikSelectYear").prop("disabled", true);
+                    PIWIK.VIEW.resetSelectMonth();
+                    PIWIK.VIEW.resetSelectDate();
+                    $(".piwikButton").prop("disabled", true);
+                    break;
+                case "month":
+                    //set the label on the date dropdown to select date
+                    $("label[for='piwikSelectDate']").text("Date:");
+                    //set the year dropdown
+                    PIWIK.VIEW.setYearDropdown();
+                    if ($("#piwikSelectYear").find("option").length == 2) {
+                        //if there's only 1 year, do setMonthDropdown
+                        PIWIK.VIEW.setMonthDropdown();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    } else {
+                        //if more than 1 year, disable other dropdowns
+                        PIWIK.VIEW.resetSelectMonth();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    }
+                    break;
+                case "week":
+                    //set the year dropdown
+                    PIWIK.VIEW.setYearDropdown();
+                    if ($("#piwikSelectYear").find("option").length == 2) {
+                        //if there's only 1 year, do setMonthDropdown
+                        PIWIK.VIEW.setMonthDropdown();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    } else {
+                        //if more than 1 year, disable other dropdowns
+                        PIWIK.VIEW.resetSelectMonth();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    }
+                    //set the label on the date dropdown to select week
+                    $("label[for='piwikSelectDate']").text("Week:");
+                    break;
+                case "day":
+                    //set the year dropdown
+                    PIWIK.VIEW.setYearDropdown();
+                    if ($("#piwikSelectYear").find("option").length == 2) {
+                        //if there's only 1 year, do setMonthDropdown
+                        PIWIK.VIEW.setMonthDropdown();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    } else {
+                        //if more than 1 year, disable other dropdowns
+                        PIWIK.VIEW.resetSelectMonth();
+                        PIWIK.VIEW.resetSelectDate();
+                        $(".piwikButton").prop("disabled", true);
+                    }
+                    //set the label on the date dropdown to select day
+                    $("label[for='piwikSelectDate']").text("Day:");
+                    break;
+                default:
+                    break;
+            }
+        }
+        PIWIK.VIEW.handleSelectYear = function () {
+            switch ($("#piwikSelectYear").val().toString()) {
+                case "-1":
+                    //if the first option is selected, disable the other dropdowns
+                    PIWIK.VIEW.resetSelectMonth();
+                    PIWIK.VIEW.resetSelectDate();
+                    $(".piwikButton").prop("disabled", true);
+                    break;
+                default:
+                    //if a year is selected, do setMonthDropdown
+                    PIWIK.VIEW.setMonthDropdown();
+                    PIWIK.VIEW.resetSelectDate();
+                    break;
+            }
+        }
+        PIWIK.VIEW.handleSelectMonth = function () {
+            switch ($("#piwikSelectMonth").val().toString()) {
+                case "-1":
+                    //if the first option is selected, disable the other dropdowns
+                    $("#piwikSelectDate").prop("disabled", true);
+                    $(".piwikButton").prop("disabled", true);
+                    break;
+                default:
+                    //if a month is selected, set the date dropdown, using week or day methods, or activate the get results button
+                    switch ($("#piwikSelectPeriod").val().toString()) {
+                        case "month":
+                            PIWIK.VIEW.resetSelectDate();
+                            $(".piwikButton").prop("disabled", false); //enable the button to get results
+                            break;
+                        case "week":
+                            PIWIK.VIEW.setWeekDropdown();
+                            $(".piwikButton").prop("disabled", true);
+                            break;
+                        case "day":
+                            PIWIK.VIEW.setDayDropdown();
+                            $(".piwikButton").prop("disabled", true);
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+            }
+        }
+        PIWIK.VIEW.handleSelectDate = function () {
+            $(".piwikButton").prop("disabled", false);
+        }
+
+        PIWIK.VIEW.setYearDropdown = function () {
+            //reset the year dropdown
+            $("#piwikSelectYear").children().remove().end().append("<option value=\"-1\">Select Year</option>");
+            //remove any handlers
+            //$("#piwikSelectYear").off();
+            //add values
+            var yearStart = PIWIK.theStartDate.getFullYear(); //start year
+            var yearEnd = PIWIK.theEndDate.getFullYear();
+            if (yearStart == yearEnd) {
+                //if there is only one year, add the yearStart, make it selected
+                $("#piwikSelectYear").append("<option value=\"" + yearStart.toString() + "\" selected>" + yearStart.toString() + "</option>");
+                $("#piwikSelectYear").prop("disabled", false);
+            } else {
+                //if there is more than one year, add the years, leave none selected,
+                while (yearStart <= yearEnd) {
+                    $("#piwikSelectYear").append("<option value=\"" + yearStart.toString() + "\">" + yearStart.toString() + "</option>");
+                    yearStart++;
+                }
+                $("#piwikSelectYear").prop("disabled", false);
+            }
+        }
+        PIWIK.VIEW.setMonthDropdown = function () {
+            //reset the month dropdown
+            $("#piwikSelectMonth").children().remove().end().append("<option value=\"-1\">Select Month</option>");
+            //remove any handlers
+            //$("#piwikSelectMonth").off();
+            //add values
+            var yearSelect = $("#piwikSelectYear").val();
+            //to get list of valid months for the selected year, make starting and ending dates
+            //for starting date, make date object using theStartDate year and month, with date=1 for beginning of month
+            var yearMonthStart = new Date(PIWIK.theStartDate.getFullYear(), PIWIK.theStartDate.getMonth(), 1);
+            //for ending date, make date object using theEndDate year, month + 1 and date = 0, which gets the last date of the month
+            var yearMonthEnd = new Date(PIWIK.theEndDate.getFullYear(), PIWIK.theEndDate.getMonth() + 1, 0);
+            //for the selected year find all valid months 0-11
+            for (var i = 0; i <= 11; i++) {
+                var yearMonthTry = new Date(yearSelect, i, 1);
+                if ((yearMonthTry >= yearMonthStart) && (yearMonthTry <= yearMonthEnd)) {
+                    $("#piwikSelectMonth").append("<option value=\"" + i.toString() + "\">" + PIWIK.LOGIC.getMonthName(i, "short") + "</option>");
+                }
+            }
+            $("#piwikSelectMonth").prop("disabled", false);
+        }
+        PIWIK.VIEW.setWeekDropdown = function () {
+            //reset the date dropdown
+            $("#piwikSelectDate").children().remove().end().append("<option value=\"-1\">Select Week</option>");
+            //remove any handlers
+            //$("#piwikSelectDate").off();
+            //for the selected year and month, find the first monday of the month
+            var firstMonday = 0;
+            for (var i = 1; i <= 7; i++) {
+                var tryDate = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10), i)
+                //try until getDay returns 1, which is Monday
+                if (tryDate.getDay() == 1) {
+                    firstMonday = i;
+                    break;
+                }
+            }
+            //get the last date of the selected month
+            var lastDateOfMonth = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10) + 1, 0);
+            //generate list of weeks in the month
+            //NOTE - not testing to make sure the week is in the valid date range, list of weeks could include weeks with no data, this does not cause an error, the PIWIK widget simply says no data available
+            for (var i = firstMonday; i <= lastDateOfMonth.getDate() ; i += 7) {
+                var theMonday = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10), i);
+                var theSunday = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10), i + 6);
+                var theText = PIWIK.LOGIC.getMonthName(theMonday.getMonth(), "short") + " " + theMonday.getDate() + " -- " + PIWIK.LOGIC.getMonthName(theSunday.getMonth(), "short") + " " + theSunday.getDate();
+                $("#piwikSelectDate").append("<option value=\"" + i + "\">" + theText + "</option>");
+            }
+            $("#piwikSelectDate").prop("disabled", false);
+        }
+        PIWIK.VIEW.setDayDropdown = function () {
+            //reset the date dropdown
+            $("#piwikSelectDate").children().remove().end().append("<option value=\"-1\">Select Day</option>");
+            //remove any handlers
+            //$("#piwikSelectDate").off();
+            //for selected year and month, get first and last dates
+            var dateStart = PIWIK.theStartDate;
+            var dateEnd = PIWIK.theEndDate;
+            //to get last date of year/month, add 1 to month and use 0 as date, this works even with December
+            var lastDateOfMonth = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10) + 1, 0);
+            for (var i = 1; i <= lastDateOfMonth.getDate() ; i++) {
+                var tryDate = new Date(parseInt($("#piwikSelectYear").val(), 10), parseInt($("#piwikSelectMonth").val(), 10), i);
+                if (tryDate >= dateStart && tryDate <= dateEnd) {
+                    $("#piwikSelectDate").append("<option value=\"" + i + "\">" + i + "</option>");
+                }
+            }
+            $("#piwikSelectDate").prop("disabled", false);
+        }
+
+        PIWIK.VIEW.showDownloadLink = function () {
+            var csvRows = [];
+            for (var i = 0, l = PIWIK.DATA.ANALYTICS.length; i < l; ++i) {
+                csvRows.push(PIWIK.DATA.ANALYTICS[i].join(','));   // unquoted CSV row
+            }
+            var csvString = csvRows.join("%0D%0A"); //characters for carriage return, line feed
+            var a = document.createElement("a");
+            a.href = "data:attachment/csv," + csvString;
+            a.target = "_blank";
+            a.download = "analytics.csv";
+            a.innerHTML = "Download data in CSV format (Chrome or Firefox only).";
+            $(PIWIK.theUrlReport).append("<div id=\"piwikDownloadLink\"></div>");
+            $("#piwikDownloadLink").append(a);
+            PIWIK.VIEW.resize();
+        }
+
+        PIWIK.VIEW.style = function () {
+            var theBoxStyle = {
+                "width": "150px",
+                "padding": "10px",
+                "margin-top": "10px",
+                "background-color": "#cee1e1",
+                "float": "left"
+            };
+            $(".piwikDropdown").css(theBoxStyle);
+            $(PIWIK.theMessage).css({
+                "font-size": "larger",
+                "width": "100%",
+                "padding": "10px",
+                "clear": "both"
+            });
+            $("#piwikDropdownsHolder").css({
+                "width": "100%",
+                "padding": "10px",
+                "clear": "both"
+            });
+            $("#piwikIframeControlsHolder").css({
+                "width": "100%",
+                "padding": "10px",
+                "clear": "both"
+            });
+            $("#piwikUrlControls").css({
+                "width": "100%",
+                "padding": "10px",
+                "clear": "both"
+            });
+            $(".piwikCell").css({
+                "padding": "5px",
+            });
+        };
+        PIWIK.VIEW.resize = function () {
+            //resize the CivicPlus page to accomodate the height of the app
+            var newPageHeight = $(PIWIK["theApp"]).height() + 200;
+            $("#structuralContainer1").css({
+                "min-height": newPageHeight + "px"
+            });
+        }
+
+        PIWIK.DATA.getUrls = function () {
+            //get the list of urls to analyze that user has entered and start the process of analyzing them
+            //clear the ANALYTICS arraly
+            PIWIK.DATA.ANALYTICS.length = 0;
+            //clear the urlList array
+            PIWIK.DATA.urlList.length = 0;
+            //put the urls entered into the text area into the array
+            PIWIK.DATA.urlList = $("#piwikUrlTextArea").val().split("\n");
+            //depending on period selected, get new values for period and date
+            switch ($("#piwikSelectPeriod").val()) {
+                case "month":
+                    PIWIK.DATA.PARAMETERS["period"] = "month";
+                    PIWIK.DATA.PARAMETERS["date"] = $("#piwikSelectYear").val().toString() + "-" + (parseInt($("#piwikSelectMonth").val(), 10) + 1).toString() + "-1";
+                    break;
+                case "week":
+                    PIWIK.DATA.PARAMETERS["period"] = "week";
+                    PIWIK.DATA.PARAMETERS["date"] = $("#piwikSelectYear").val().toString() + "-" + (parseInt($("#piwikSelectMonth").val(), 10) + 1).toString() + "-" + $("#piwikSelectDate").val().toString();
+                    break;
+                case "day":
+                    PIWIK.DATA.PARAMETERS["period"] = "day";
+                    PIWIK.DATA.PARAMETERS["date"] = $("#piwikSelectYear").val().toString() + "-" + (parseInt($("#piwikSelectMonth").val(), 10) + 1).toString() + "-" + $("#piwikSelectDate").val().toString();
+                    break;
+                default:
+                    break;
+            }
+            //display the period and date for the report
+            PIWIK.VIEW.showPeriodDate();
+            //start the table for results
+            $(PIWIK.theUrlReport).empty();
+            $(PIWIK.theUrlReport).append("<table id=\"piwikResults\"></table>");
+            $("#piwikResults").append("<tr><th class=\"piwikCell\">PAGE URL</th><th class=\"piwikCell\">PAGEVIEWS</th></tr>");
+            PIWIK.DATA.urlListCount = 0;
+            //set the header row for the data download
+            var theNumberHeader = PIWIK.DATA.PARAMETERS["period"] + "(" + PIWIK.DATA.PARAMETERS["date"] + ")";
+            PIWIK.DATA.ANALYTICS.push(["PAGE URL", theNumberHeader]);
+            PIWIK.DATA.getAnalytics();
+        }
+        PIWIK.DATA.getAnalytics = function () {
+            //loop through the list of URLs, not using the loop structure because of the async AJAX calls to PIWIK
+            //want a call to PIWIK to return a result for a URL before going on to the next URL
+            if (PIWIK.DATA.urlListCount >=  PIWIK.DATA.urlList.length) {
+                //done, finish by adding the link to data
+                PIWIK.VIEW.showDownloadLink();
+                //style and resize the app one last time
+                PIWIK.VIEW.style();
+                PIWIK.VIEW.resize();
+            } else {
+                if (PIWIK.DATA.urlList[PIWIK.DATA.urlListCount].length == 0) {
+                    //skip any blank lines in the list of urls
+                    PIWIK.DATA.urlListCount++;
+                    PIWIK.DATA.getAnalytics();
+                } else if (!PIWIK.theUrlRegExp.test(PIWIK.DATA.urlList[PIWIK.DATA.urlListCount])) {
+                    // test for web page address pattern, alert the user if not a url then skip
+                    alert("\"" + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "\" is not a web page address and will not be included in the analysis");
+                    PIWIK.DATA.urlListCount++;
+                    PIWIK.DATA.getAnalytics();
+                } else {
+                    //process each url into parts
+                    var arrUrl = PIWIK.DATA.urlList[PIWIK.DATA.urlListCount].split("/");
+                    // assume arrUrl is 
+                    //     [protocol:,,server,pagenumber,pagetitleabbrv] or
+                    //     [protocol:,,server,filename and query]
+                    // make the parameter that PIWIK needs for analysis
+                    var urlParameter = "/" + arrUrl[3].toString();
+                    if (arrUrl.length > 4) {
+                        urlParameter += "/" + arrUrl[4].toString().toLowerCase();
+                    }
+                    //add pageUrl value to PARAMETERS
+                    PIWIK.DATA.PARAMETERS["pageUrl"] = urlParameter;
+                    $.ajax({
+                        type: "POST",
+                        url: PIWIK.theURL,
+                        data: PIWIK.DATA.PARAMETERS,
+                        async: false,
+                        jsonpCallback: "piwik",
+                        contentType: "application/json",
+                        dataType: "jsonp",
+                        beforeSend: function () {
+                            //do any startup tasks here;
+                        },
+                        success: function (data, textStatus, xhr) {
+                            if ((typeof data[0] == undefined) || (data[0] == null)) {
+                                //if there is no data for that url, PIWIK returns an empty object, so data[0] is null
+                                $("#piwikResults").append("<tr><td class=\"piwikCell\"><a href=\"" + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "\" target=\"_blank\">" + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "</td><td class=\"piwikCell\">" + "no data" + "</td></tr>");
+                                PIWIK.DATA.ANALYTICS.push([PIWIK.DATA.urlList[PIWIK.DATA.urlListCount], "0"]);
+                            } else {
+                                $("#piwikResults").append("<tr><td class=\"piwikCell\"><a href=\"" + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "\" target=\"_blank\">" + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "</td><td class=\"piwikCell\">" + data[0]["nb_hits"] + "</td></tr>");
+                                PIWIK.DATA.ANALYTICS.push([PIWIK.DATA.urlList[PIWIK.DATA.urlListCount], data[0]["nb_hits"]]);
+                            }
+                            //resize the app after adding a line
+                            PIWIK.VIEW.resize();
+                            PIWIK.DATA.urlListCount++;
+                            PIWIK.DATA.getAnalytics();
+                        },
+                        error: function (xhr, textStatus, errorThrown) {
+                            //if there is any error in the process of making the request, show the error
+                            //PIWIK.VIEW.showError(errorThrown);
+                            alert("For the URL: " + PIWIK.DATA.urlList[PIWIK.DATA.urlListCount] + "\nthis error has occurred: " + errorThrown);
+                            PIWIK.DATA.urlListCount++;
+                            PIWIK.DATA.getAnalytics();
+                        }
+                    });
+                }
+            }
+        }
+
+        PIWIK.LOGIC.getMonthName = function (month, longOrShort) {
+            var monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            var monthNamesLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            switch (longOrShort) {
+                case "long":
+                    return monthNamesLong[month];
+                    break;
+                case "short":
+                    return monthNamesShort[month];
+                    break;
+                default:
+                    return "error";
+                    break;
+            }
+        }
+
+        $(document).ready(function () {
+            PIWIK.VIEW.showForm();
+            PIWIK.VIEW.showDropdowns();
+            PIWIK.VIEW.showUrlControls();
+            PIWIK.VIEW.style();
+        });
+    </script>
+</body>
+</html>

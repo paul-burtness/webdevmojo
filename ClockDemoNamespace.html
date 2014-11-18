@@ -8,22 +8,33 @@
 
 <h1>Clock Demo</h1>
 
-<div id="theButton" onclick="StartClock();">Start the clock</div>
+<div id="theButton" onclick="MOJO.VIEW.StartClock();">Start the clock</div>
 <div id="theClock" style="font-family: 'Comic Sans MS'; font-size: 5em;"></div>
 
 <script type="text/javascript">
-    var timerID = null;
-    function StartClock() {
+    //create a namespace for this app
+    var MOJO = MOJO || {};
+    //create constants for the app
+    MOJO["timerID"] = null;
+    //create main objects for organizing data and code
+    MOJO["VIEW"] = {};
+    MOJO["LOGIC"] = {};
+
+    MOJO.VIEW["StartClock"] = function () {
         if (document.getElementById("theButton").innerText == "Start the clock") {
             document.getElementById("theButton").innerText = "Stop the clock";
-            ShowTime();
+            MOJO.VIEW.ShowTime();
         } else {
-            clearTimeout(timerID);
+            clearTimeout(MOJO.timerID);
             document.getElementById("theButton").innerText = "Start the clock";
             document.getElementById("theClock").innerText = "";
         }
     }
-    function ShowTime() {
+    MOJO.VIEW["ShowTime"] = function () {
+        document.getElementById("theClock").innerText = MOJO.LOGIC.FormatTime();
+        MOJO.timerID = setTimeout("MOJO.VIEW.ShowTime()", 1000);
+    }
+    MOJO.LOGIC["FormatTime"] = function () {
         var now = new Date();
         var hours = now.getHours();
         var minutes = now.getMinutes();
@@ -32,8 +43,7 @@
         timeValue += ((minutes < 10) ? ":0" : ":") + minutes;
         timeValue += ((seconds < 10) ? ":0" : ":") + seconds;
         timeValue += (hours >= 12) ? " P.M." : " A.M.";
-        document.getElementById("theClock").innerText = timeValue;
-        timerID = setTimeout("ShowTime()", 1000);
+        return timeValue;
     }
 </script>
 <!-- Clock Demo from http://www.htmlgoodies.com/beyond/javascript/article.php/3470991 -->

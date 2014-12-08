@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Webdevmojo - Clock Demo before namespace</title>
+</head>
+<body>
+
+<h1>Clock Demo</h1>
+
+<div id="theButton" onclick="StartClock();">Start the clock</div>
+<div id="theClock" style="font-family: 'Comic Sans MS'; font-size: 5em;"></div>
+
+<script type="text/javascript">
+    var timerID = null;
+    function StartClock() {
+        if (document.getElementById("theButton").innerText == "Start the clock") {
+            document.getElementById("theButton").innerText = "Stop the clock";
+            ShowTime();
+        } else {
+            clearTimeout(timerID);
+            document.getElementById("theButton").innerText = "Start the clock";
+            document.getElementById("theClock").innerText = "";
+        }
+    }
+    function ShowTime() {
+        var now = new Date();
+        var hours = now.getHours();
+        var minutes = now.getMinutes();
+        var seconds = now.getSeconds();
+        var timeValue = "" + ((hours > 12) ? hours - 12 : hours);
+        timeValue += ((minutes < 10) ? ":0" : ":") + minutes;
+        timeValue += ((seconds < 10) ? ":0" : ":") + seconds;
+        timeValue += (hours >= 12) ? " P.M." : " A.M.";
+        document.getElementById("theClock").innerText = timeValue;
+        timerID = setTimeout("ShowTime()", 1000);
+    }
+</script>
+<!-- Clock Demo from http://www.htmlgoodies.com/beyond/javascript/article.php/3470991 -->
+</body>
+</html>

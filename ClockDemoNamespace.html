@@ -1,0 +1,49 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Webdevmojo - Clock Demo with namespace</title>
+</head>
+<body>
+
+<h1>Clock Demo</h1>
+
+<div id="theButton" onclick="MOJO.VIEW.StartClock();">Start the clock</div>
+<div id="theClock" style="font-family: 'Comic Sans MS'; font-size: 5em;"></div>
+
+<script type="text/javascript">
+    //create a namespace for this app
+    var MOJO = MOJO || {};
+    //create constants for the app
+    MOJO["timerID"] = null;
+    //create main objects for organizing data and code
+    MOJO["VIEW"] = {};
+    MOJO["LOGIC"] = {};
+
+    MOJO.VIEW["StartClock"] = function () {
+        if (document.getElementById("theButton").innerText == "Start the clock") {
+            document.getElementById("theButton").innerText = "Stop the clock";
+            MOJO.VIEW.ShowTime();
+        } else {
+            clearTimeout(MOJO.timerID);
+            document.getElementById("theButton").innerText = "Start the clock";
+            document.getElementById("theClock").innerText = "";
+        }
+    }
+    MOJO.VIEW["ShowTime"] = function () {
+        document.getElementById("theClock").innerText = MOJO.LOGIC.FormatTime();
+        MOJO.timerID = setTimeout("MOJO.VIEW.ShowTime()", 1000);
+    }
+    MOJO.LOGIC["FormatTime"] = function () {
+        var now = new Date();
+        var hours = now.getHours();
+        var minutes = now.getMinutes();
+        var seconds = now.getSeconds();
+        var timeValue = "" + ((hours > 12) ? hours - 12 : hours);
+        timeValue += ((minutes < 10) ? ":0" : ":") + minutes;
+        timeValue += ((seconds < 10) ? ":0" : ":") + seconds;
+        timeValue += (hours >= 12) ? " P.M." : " A.M.";
+        return timeValue;
+    }
+</script>
+</body>
+</html>
